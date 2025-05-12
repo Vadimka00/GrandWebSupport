@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <title>Чат</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f9f9fb;
+      padding: 2rem;
+      max-width: 800px;
+      margin: auto;
+    }
+
+    .message {
+      max-width: 70%;
+      margin-bottom: 1rem;
+      padding: 0.8rem;
+      border-radius: 12px;
+      position: relative;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .user {
+      background: #e1f0ff;
+      margin-right: auto;
+      border-top-left-radius: 0;
+    }
+
+    .mod {
+      background: #dbffe4;
+      margin-left: auto;
+      border-top-right-radius: 0;
+    }
+
+    .caption {
+      font-style: italic;
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 0.3rem;
+    }
+
+    .photo {
+      margin-top: 0.5rem;
+      max-width: 100%;
+      border-radius: 6px;
+    }
+
+    .meta {
+      font-size: 0.7rem;
+      color: #888;
+      margin-top: 0.4rem;
+      text-align: right;
+    }
+
+    .header {
+      margin-bottom: 2rem;
+    }
+
+    .header h2 {
+      margin-bottom: 0.5rem;
+    }
+
+    .back {
+      display: inline-block;
+      margin-bottom: 1rem;
+      text-decoration: none;
+      color: #0066ff;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <a href="/requests" class="back">← Назад к списку</a>
+
+  <div class="header">
+    <h2>🆔 Запрос #{{ support.id }}</h2>
+    <div><strong>Пользователь:</strong> {{ support.user.full_name }} ({{ support.user.username or "—" }})</div>
+    <div><strong>Модератор:</strong>
+      {% if support.moderator %}
+        {{ support.moderator.full_name }} ({{ support.moderator.username or "—" }})
+      {% else %}
+        — не назначен —
+      {% endif %}
+    </div>
+  </div>
+
+  {% for msg in messages %}
+    <div class="message {% if msg.is_user %}user{% elif msg.is_moderator %}mod{% endif %}">
+      {% if msg.text %}
+        <div>{{ msg.text }}</div>
+      {% endif %}
+      {% if msg.photo_url %}
+        <img src="{{ msg.photo_url }}" class="photo">
+      {% endif %}
+      {% if msg.caption %}
+        <div class="caption">{{ msg.caption }}</div>
+      {% endif %}
+      <div class="meta">{{ msg.timestamp.strftime("%Y-%m-%d %H:%M") }}</div>
+    </div>
+  {% endfor %}
+</body>
+</html>

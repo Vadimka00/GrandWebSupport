@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <title>Заявки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0; padding: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+    }
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      border-left: 4px solid #0066ff;
+    }
+    .meta {
+      font-size: 0.85rem;
+      color: #777;
+      margin-bottom: 0.5rem;
+    }
+    .line {
+      margin-bottom: 0.4rem;
+    }
+    .line strong {
+      color: #333;
+    }
+    .link {
+      margin-top: 0.5rem;
+      display: inline-block;
+      text-decoration: none;
+      background: #0066ff;
+      color: #fff;
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .status {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.8rem;
+      background: #eee;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-weight: bold;
+    }
+
+    .overview {
+        margin-bottom: 1.5rem;
+    }
+    .lang-overview {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    .lang-card {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 0.6rem 1rem;
+        flex: 1 1 140px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .lang-header {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 0.4rem;
+    }
+    .lang-body div {
+        font-size: 0.85rem;
+    }
+    .status {
+        display: inline-block;
+        margin-right: 0.5rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
+    .status.pending { background: #fff3cd; color: #856404; }
+    .status.in_progress { background: #cce5ff; color: #004085; }
+    .status.closed { background: #d4edda; color: #155724; }
+
+    .filters { display:flex; gap:1rem; margin-bottom:1.5rem; align-items:center; }
+    .filters select { padding:0.4rem; border-radius:4px; border:1px solid #ccc; }
+
+    /* Адаптив */
+    @media (max-width: 600px) {
+        .lang-overview { flex-direction: column; }
+    }
+
+  </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block title %}Запросы – Админ-панель{% endblock %}
+    
+    {% block content %}
+
+  <h1>📋 Заявки</h1>
+  <!-- Фильтры -->
+  <form method="get" class="filters">
+    <label>
+      Язык:
+      <select name="lang" onchange="this.form.submit()">
+        <option value="all" {% if current_lang=="all" %}selected{% endif %}>Все</option>
+        {% for l in languages %}
+          <option value="{{ l }}" {% if l==current_lang %}selected{% endif %}>
+            {{ flags.get(l, '🏳') }} {{ l }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+        Статус:
+        <select name="status" onchange="this.form.submit()">
+          <option value="all" {% if current_status=="all" %}selected{% endif %}>
+            Все
+          </option>
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if s==current_status %}selected{% endif %}>
+              {{ status_labels.get(s, s) }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+    <noscript><button type="submit">Применить</button></noscript>
+  </form>
+  <div class="overview">
+    <p><strong>Всего заявок:</strong> {{ total_requests }}</p>
+    <div class="lang-overview">
+      {% for lang, stats in lang_stats.items() %}
+        <div class="lang-card">
+          <div class="lang-header">
+            {{ flags.get(lang, '🏳') }} {{ lang }}
+          </div>
+          <div class="lang-body">
+            <div><strong>Всего:</strong> {{ stats.total }}</div>
+            <div>
+              {% for s in statuses %}
+                <span class="status {{ s }}">
+                  {{ status_labels.get(s, s) }}: {{ stats[s] }}
+                </span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% for req in requests_list %}
+    <div class="card">
+        <div class="meta">
+            🆔 #{{ req.id }} |
+            {{ flags.get(req.language,'🏳') }} {{ req.language }} |
+            🕓 {{ req.created_at.strftime("%Y-%m-%d %H:%M") }}
+            {% if req.closed_at %} → {{ req.closed_at.strftime("%Y-%m-%d %H:%M") }}{% endif %}
+            |
+            <span class="status {{ req.status }}">
+              {{ status_labels.get(req.status, req.status) }}
+            </span>
+          </div>
+      <div class="line"><strong>Пользователь:</strong> {{ req.user.full_name }} ({{ req.user.username or "—" }})</div>
+      <div class="line">
+        <strong>Модератор:</strong>
+        {% if req.moderator %}
+          {{ req.moderator.full_name }} ({{ req.moderator.username or "—" }})
+        {% else %}
+          — не назначен —
+        {% endif %}
+      </div>
+      <a href="/chat/{{ req.id }}" class="link">🔍 Смотреть чат</a>
+    </div>
+  {% endfor %}
+  <div style="text-align:center; margin:2rem 0;">
+    {% if total_pages > 1 %}
+      {% for p in range(1, total_pages+1) %}
+        {% if p == page %}
+          <strong style="margin:0 4px;">[{{ p }}]</strong>
+        {% else %}
+          <a href="?lang={{ current_lang }}&status={{ current_status }}&page={{ p }}&per_page={{ per_page }}"
+             style="margin:0 4px;">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  {% endblock %}
+</body>
+</html>

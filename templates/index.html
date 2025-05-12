@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <title>Админ-панель</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root {
+      --font: sans-serif;
+      --bg: #f4f6f9;
+      --card: #fff;
+      --border: #ddd;
+      --accent: #0066ff;
+      --radius: 6px;
+      --text: #333;
+      --muted: #666;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    section { margin:2rem 0; }
+    .cards { display:flex; flex-wrap:wrap; gap:1rem; }
+    .card {
+      background: var(--card);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      padding:1rem;
+      flex:1 1 140px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+    }
+    .card h2 {
+      margin:0 0 .5rem;
+      font-size:1rem;
+      color: var(--accent);
+    }
+    .card .value {
+      font-size:1.4rem;
+      font-weight:600;
+    }
+    .status {
+      display:inline-block;
+      margin-right:.5rem;
+      margin-top:.5rem;
+      padding:.2rem .5rem;
+      border-radius:4px;
+      font-size:.75rem;
+      text-transform:uppercase;
+    }
+    .status.pending    { background:#fff3cd; color:#856404; }
+    .status.in_progress{ background:#cce5ff; color:#004085; }
+    .status.closed     { background:#d4edda; color:#155724; }
+
+    @media(max-width:768px){
+      .cards { flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+
+    {% extends "base.html" %}
+
+    {% block title %}Главная – Админ-панель{% endblock %}
+    
+    {% block content %}
+
+<section>
+  <h2>Пользователи по языкам ( {{ total_users }} ) </h2>
+  <div class="cards">
+    {% for lang in languages %}
+      <div class="card">
+        <h2>{{ flags.get(lang,'🏳') }} {{ lang }}</h2>
+        <div class="value">{{ user_stats.get(lang, 0) }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>Модераторы по языкам ( {{ total_mods }} )</h2>
+  <div class="cards">
+    {% for lang in languages %}
+      <div class="card">
+        <h2>{{ flags.get(lang,'🏳') }} {{ lang }}</h2>
+        <div class="value">{{ mod_stats.get(lang, 0) }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>Заявки по языкам и статусам ( {{ total_reqs }} )</h2>
+  <div class="cards">
+    {% for lang in languages %}
+      <div class="card">
+        <h2>{{ flags.get(lang,'🏳') }} {{ lang }}</h2>
+        <div class="value">{{ req_stats.get(lang, {}).total or 0 }}</div>
+        <div>
+          {% for s in statuses %}
+            <span class="status {{ s }}">
+              {{ status_labels.get(s,s) }}: {{ req_stats.get(lang, {}).get(s, 0) }}
+            </span>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+</body>
+</html>

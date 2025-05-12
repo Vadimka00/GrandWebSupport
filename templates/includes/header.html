@@ -1,0 +1,133 @@
+<header class="site-header">
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" />
+    <div class="container">
+      <label for="nav-toggle" class="nav-toggle-label">
+        <span></span>
+        <span></span>
+        <span></span>
+      </label>
+      <a href="/" class="logo">🛠 Админ-панель</a>
+      <nav class="nav">
+        <ul class="nav-links">
+        <li><a href="/">Главная</a></li>
+          <li><a href="/users">Пользователи</a></li>
+          <li><a href="/requests">Заявки</a></li>
+          <li><a href="/translations">Переводы</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+  
+  <style>
+    :root {
+      --header-bg: #fff;
+      --accent: #0066ff;
+      --text: #333;
+      --shadow: rgba(0,0,0,0.05);
+    }
+  
+    /* шапка во всю ширину */
+    .site-header {
+      width: 100%;
+      background: var(--header-bg);
+      box-shadow: 0 2px 8px var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+  
+    /* контейнер внутри шапки */
+    .site-header .container {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      position: relative;
+    }
+  
+    /* логотип */
+    .logo {
+      font-size: 1.4rem;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: bold;
+    }
+  
+    /* скрываем checkbox */
+    .nav-toggle {
+      display: none;
+    }
+  
+    /* гамбургер */
+    .nav-toggle-label {
+      display: none;
+      flex-direction: column;
+      justify-content: space-around;
+      width: 28px;
+      height: 24px;
+      cursor: pointer;
+    }
+    .nav-toggle-label span {
+      display: block;
+      height: 3px;
+      background: var(--text);
+      border-radius: 2px;
+    }
+  
+    /* меню ссылок */
+    .nav-links {
+      list-style: none;
+      display: flex;
+      gap: 1rem;
+      margin: 0;
+      padding: 0;
+    }
+    .nav-links a {
+      display: block;
+      text-decoration: none;
+      color: var(--text);
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      transition: background .2s, color .2s;
+    }
+    .nav-links a:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+  
+    /* адаптив */
+    @media (max-width: 720px) {
+      /* показываем гамбургер */
+      .nav-toggle-label {
+        display: flex;
+      }
+      /* по умолчанию скрываем меню */
+      .nav-links {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--header-bg);
+        flex-direction: column;
+        align-items: stretch;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height .3s ease-out;
+      }
+      .nav-links li {
+        border-top: 1px solid #eee;
+        align-items: center;
+      }
+      .nav-links a {
+        padding: 0.75rem;
+        text-align: center;
+      }
+      /* при открытии чекбоксом разворачиваем */
+      .nav-toggle:checked ~ .container .nav-links {
+        max-height: 300px; /* подберите под число пунктов */
+        box-shadow: 0 2px 8px var(--shadow);
+      }
+    }
+  </style>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <title>Translations</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --font: "Inter", sans-serif;
+      --bg: #fff;
+      --text: #111;
+      --muted: #888;
+      --border: #eee;
+      --accent-bg: #f9f9f9;
+    }
+
+    body {
+      margin: 0; padding: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+
+    th {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+        padding: 0.6rem 0.75rem;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    td small.key-id {
+        color: var(--muted);
+        font-size: 0.75rem;
+    }
+
+    tr:nth-child(even) {
+      background-color: var(--accent-bg);
+    }
+
+    .editable:focus {
+        outline: 2px solid #007bff;
+        background-color: #eef6ff;
+    }
+
+    @media (max-width: 768px) {
+      table, thead, tbody, th, td, tr {
+        display: block;
+      }
+
+      thead {
+        display: none;
+      }
+
+      tr {
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+        border: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      td {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.5rem 0;
+        }
+
+        td::before {
+            content: attr(data-label);
+            font-weight: 600;
+            color: var(--muted);
+            margin-bottom: 0.25rem;
+            margin-right: 0.45rem;
+            font-size: 0.8rem;
+        }
+
+        td small.key-id {
+            display: none;
+        }
+    }
+
+    .lang-code {
+        margin-left: 0.3rem;
+        color: var(--muted);
+    }
+
+    @media (max-width: 768px) {
+        .lang-code {
+            display: none;
+        }
+    }
+
+  </style>
+</head>
+<body>
+
+    {% extends "base.html" %}
+
+    {% block title %}Переводы – Админ-панель{% endblock %}
+    
+    {% block content %}
+
+  <h1>📘 Переводы</h1>
+  <table>
+    <thead>
+        <tr>
+          <th>Описание</th>
+          {% for lang in langs %}
+            <th class="lang-head">
+              {{ flags.get(lang, "🏳") }} <span class="lang-code">{{ lang }}</span>
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+    <tbody>
+      {% for key, row in translations.items() %}
+        <tr>
+            <td data-label="Описание">
+                <strong>{{ key_descriptions.get(key, '—') }}</strong><br>
+                <small class="key-id">{{ key }}</small>
+            </td>
+          {% for lang in langs %}
+          <td <td data-label="{{ flags.get(lang, '🏳') }}"
+                contenteditable="true"
+                class="editable"
+                data-key="{{ key }}"
+                data-lang="{{ lang }}">
+                {{ row.get(lang, '') }}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endblock %}
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelectorAll(".editable").forEach(cell => {
+        cell.addEventListener("blur", async () => {
+          const key = cell.dataset.key;
+          const lang = cell.dataset.lang;
+          const text = cell.innerText.trim();
+  
+          await fetch("/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, lang, text })
+          }).then(res => {
+            if (!res.ok) alert("❌ Не удалось сохранить");
+          }).catch(() => {
+            alert("❌ Ошибка соединения");
+          });
+        });
+      });
+    });
+  </script>
+
+</body>
+</html>

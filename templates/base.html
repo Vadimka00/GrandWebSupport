@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Админ-панель{% endblock %}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  {% block head %}{% endblock %}
+
+  
+</head>
+<body style="margin:0; background:#f4f6f9; color:#333; font-family:sans-serif;">
+  {% include "includes/header.html" %}
+  <main style="padding:1rem; max-width:960px; margin:auto;">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
