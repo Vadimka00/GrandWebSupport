@@ -2,9 +2,11 @@
     <input type="checkbox" id="nav-toggle" class="nav-toggle" />
     <div class="container">
       <label for="nav-toggle" class="nav-toggle-label">
-        <span></span>
-        <span></span>
-        <span></span>
+        <div class="burger">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
       </label>
       <a href="/" class="logo">🛠 Админ-панель</a>
       <nav class="nav">
@@ -13,6 +15,7 @@
           <li><a href="/users">Пользователи</a></li>
           <li><a href="/requests">Заявки</a></li>
           <li><a href="/translations">Переводы</a></li>
+          <li><a href="/logout">Выход</a></li>
         </ul>
       </nav>
     </div>
@@ -60,22 +63,6 @@
       display: none;
     }
   
-    /* гамбургер */
-    .nav-toggle-label {
-      display: none;
-      flex-direction: column;
-      justify-content: space-around;
-      width: 28px;
-      height: 24px;
-      cursor: pointer;
-    }
-    .nav-toggle-label span {
-      display: block;
-      height: 3px;
-      background: var(--text);
-      border-radius: 2px;
-    }
-  
     /* меню ссылок */
     .nav-links {
       list-style: none;
@@ -97,6 +84,47 @@
       color: #fff;
     }
   
+
+    /* сам бургер — обёртка */
+    .burger {
+        display: none;
+    }
+
+    .burger span {
+        display: none;
+    }
+
+    /* первая */
+    .burger span:nth-child(1) {
+        top: 0;
+    }
+
+    /* вторая */
+    .burger span:nth-child(2) {
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    /* третья */
+    .burger span:nth-child(3) {
+        bottom: 0;
+    }
+
+    /* превращение в крест */
+    .nav-toggle:checked ~ .container .burger span:nth-child(1) {
+        transform: rotate(45deg);
+        top: 50%;
+    }
+
+    .nav-toggle:checked ~ .container .burger span:nth-child(2) {
+        opacity: 0;
+    }
+
+    .nav-toggle:checked ~ .container .burger span:nth-child(3) {
+        transform: rotate(-45deg);
+        bottom: auto;
+        top: 50%;
+    }
     /* адаптив */
     @media (max-width: 720px) {
       /* показываем гамбургер */
@@ -113,6 +141,7 @@
         flex-direction: column;
         align-items: stretch;
         max-height: 0;
+        gap: 0;
         overflow: hidden;
         transition: max-height .3s ease-out;
       }
@@ -124,6 +153,30 @@
         padding: 0.75rem;
         text-align: center;
       }
+        /* сам бургер — обёртка */
+        .burger {
+            width: 28px;
+            height: 24px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: 0.3s ease;
+        }
+
+        /* полоски */
+        .burger span {
+            display: block;
+            height: 3px;
+            width: 100%;
+            background-color: var(--text);
+            border-radius: 2px;
+            transition: 0.3s ease;
+            position: absolute;
+            left: 0;
+        }
+
       /* при открытии чекбоксом разворачиваем */
       .nav-toggle:checked ~ .container .nav-links {
         max-height: 300px; /* подберите под число пунктов */

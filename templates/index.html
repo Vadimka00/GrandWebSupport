@@ -70,7 +70,7 @@
     {% block content %}
 
 <section>
-  <h2>Пользователи по языкам ( {{ total_users }} ) </h2>
+  <h3>Пользователи по языкам ( {{ total_users }} ) </h2>
   <div class="cards">
     {% for lang in languages %}
       <div class="card">
@@ -82,7 +82,7 @@
 </section>
 
 <section>
-  <h2>Модераторы по языкам ( {{ total_mods }} )</h2>
+  <h3>Модераторы по языкам ( {{ total_mods }} )</h2>
   <div class="cards">
     {% for lang in languages %}
       <div class="card">
@@ -94,7 +94,7 @@
 </section>
 
 <section>
-  <h2>Заявки по языкам и статусам ( {{ total_reqs }} )</h2>
+  <h3>Заявки по языкам и статусам ( {{ total_reqs }} )</h2>
   <div class="cards">
     {% for lang in languages %}
       <div class="card">

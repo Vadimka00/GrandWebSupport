@@ -15,6 +15,7 @@ import json
 import bcrypt
 import secrets
 from starlette.responses import Response
+from starlette.status import HTTP_303_SEE_OTHER
 
 class UpdateRequest(BaseModel):
     key: str
@@ -35,6 +36,55 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Этот middleware позволит перехватывать 500 ошибки
+@app.middleware("http")
+async def custom_error_handler(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        # Можно логировать тут: print(f"Unhandled error: {e}")
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head>
+              <meta charset="UTF-8">
+              <title>Ошибка</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <style>
+                body {
+                  font-family: sans-serif;
+                  background: #fdf2f2;
+                  color: #333;
+                  padding: 2rem;
+                  text-align: center;
+                }
+                .error-box {
+                  background: #fff;
+                  border: 1px solid #e0e0e0;
+                  max-width: 400px;
+                  margin: 4rem auto;
+                  padding: 2rem;
+                  border-radius: 8px;
+                  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                }
+              </style>
+            </head>
+            <body>
+              <div class="error-box">
+                <h2>Что-то пошло не так</h2>
+                <p>Пожалуйста, перезагрузите страницу.</p>
+              </div>
+            </body>
+            </html>
+            """,
+            status_code=500
+        )
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/login", response_class=HTMLResponse)
 async def login(
@@ -61,22 +111,6 @@ async def login(
         response.set_cookie("user_id", str(cred.user_id), httponly=True)
         return response
 
-@app.post("/login", response_class=HTMLResponse)
-async def login(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-    response: Response = None
-):
-    async with SessionLocal() as session:
-        cred = await session.get(Credentials, {"email": email})
-        if not cred or not bcrypt.checkpw(password.encode(), cred.password_hash.encode()):
-            return templates.TemplateResponse("login.html", {"request": request, "error": "Неверная пара логин/пароль"})
-        # успешный вход → ставим простую куку
-        response = RedirectResponse("/", status_code=303)
-        response.set_cookie("user_id", str(cred.user_id), httponly=True)
-        return response
-
 @app.get("/logout")
 def logout(response: Response):
     response = RedirectResponse("/login", status_code=303)
@@ -85,7 +119,7 @@ def logout(response: Response):
 
 def get_current_user(user_id: str = Cookie(None)):
     if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=HTTP_303_SEE_OTHER, headers={"Location": "/login"})
     return int(user_id)
 
 @app.get("/", dependencies=[Depends(get_current_user)], response_class=HTMLResponse)
