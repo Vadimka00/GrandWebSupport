@@ -162,12 +162,32 @@
         <div class="meta">
             🆔 #{{ req.id }} |
             {{ flags.get(req.language,'🏳') }} {{ req.language }} |
-            🕓 {{ req.created_at.strftime("%Y-%m-%d %H:%M") }}
-            {% if req.closed_at %} → {{ req.closed_at.strftime("%Y-%m-%d %H:%M") }}{% endif %}
+            🕓 {{ req.created_at.strftime("%m.%d %H:%M") }}
+            {% if req.taken_at %}
+                → 🛠 {{ req.taken_at.strftime("%m.%d %H:%M") }}
+            {% else %}
+                → 🛠 нет данных
+            {% endif %}
+            {% if req.closed_at %}
+                → ✅ {{ req.closed_at.strftime("%m.%d %H:%M") }}
+            {% endif %}
             |
             <span class="status {{ req.status }}">
               {{ status_labels.get(req.status, req.status) }}
             </span>
+            {% if req.closed_at %}
+            <div class="line time">
+              ⏳ Общая жизнь: 
+              {% set total_secs = (req.closed_at - req.created_at).total_seconds() %}
+              {{ (total_secs // 60) | int }} мин {{ (total_secs % 60) | int }} сек
+          
+              {% if req.taken_at %}
+                | 👨‍💻 Работа модератора: 
+                {% set work_secs = (req.closed_at - req.taken_at).total_seconds() %}
+                {{ (work_secs // 60) | int }} мин {{ (work_secs % 60) | int }} сек
+              {% endif %}
+            </div>
+          {% endif %}
           </div>
       <div class="line"><strong>Пользователь:</strong> {{ req.user.full_name }} ({{ req.user.username or "—" }})</div>
       <div class="line">

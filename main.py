@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException, Cookie, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from models import SessionLocal, Translation, User, Status, MessageHistory, SupportRequest, Credentials
+from models import SessionLocal, Translation, User, Status, Language, SupportRequest, Credentials
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.orm import selectinload
 from utils.telegram import resolve_photo_url
@@ -14,8 +14,10 @@ import uvicorn
 import json
 import bcrypt
 import secrets
+import traceback
 from starlette.responses import Response
 from starlette.status import HTTP_303_SEE_OTHER
+from utils.logger import logger
 
 class UpdateRequest(BaseModel):
     key: str
@@ -37,13 +39,18 @@ templates = Jinja2Templates(directory="templates")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+
 # Этот middleware позволит перехватывать 500 ошибки
 @app.middleware("http")
 async def custom_error_handler(request: Request, call_next):
     try:
         return await call_next(request)
     except Exception as e:
-        # Можно логировать тут: print(f"Unhandled error: {e}")
+        logger.error(
+            f"❌ Unhandled error on {request.method} {request.url.path}: {e}\n{traceback.format_exc()}"
+        )
+
         return HTMLResponse(
             content="""
             <!DOCTYPE html>
@@ -84,6 +91,7 @@ async def custom_error_handler(request: Request, call_next):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
+    logger.debug("[GET /login] Отображение формы входа")
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/login", response_class=HTMLResponse)
@@ -93,131 +101,173 @@ async def login(
     password: str = Form(...),
     response: Response = None
 ):
+    logger.info(f"[POST /login] Попытка входа с email: {email}")
     async with SessionLocal() as session:
-        # Правильный способ получить по email
         result = await session.execute(
             select(Credentials).where(Credentials.email == email)
         )
         cred = result.scalar_one_or_none()
 
         if not cred or not bcrypt.checkpw(password.encode(), cred.password_hash.encode()):
+            logger.warning(f"[POST /login] Неудачная попытка входа для email: {email}")
             return templates.TemplateResponse(
                 "login.html",
                 {"request": request, "error": "Неверная пара логин/пароль"}
             )
 
-        # Успешный вход — ставим куку и редиректим
+        logger.info(f"[POST /login] Успешный вход. user_id={cred.user_id}")
         response = RedirectResponse("/", status_code=303)
         response.set_cookie("user_id", str(cred.user_id), httponly=True)
         return response
 
 @app.get("/logout")
 def logout(response: Response):
+    logger.info("[GET /logout] Выход пользователя. Очистка куки.")
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie("user_id")
     return response
 
 def get_current_user(user_id: str = Cookie(None)):
     if not user_id:
+        logger.debug("[AUTH] Отсутствует user_id в cookie. Перенаправление на /login")
         raise HTTPException(status_code=HTTP_303_SEE_OTHER, headers={"Location": "/login"})
+    logger.debug(f"[AUTH] Получен user_id из cookie: {user_id}")
     return int(user_id)
 
 @app.get("/", dependencies=[Depends(get_current_user)], response_class=HTMLResponse)
 async def index(request: Request):
-    async with SessionLocal() as session:
-        # 1) Пользователи по языкам
-        u = await session.execute(
-            select(User.language_code, func.count()).group_by(User.language_code)
-        )
-        user_stats = dict(u.all())
-        total_users = sum(user_stats.values())
+    logger.info("[GET /] Загрузка главной страницы")
 
-        # 2) Модераторы по языкам
-        m = await session.execute(
-            select(User.language_code, func.count())
-            .where(User.role == "moderator")
-            .group_by(User.language_code)
-        )
-        mod_stats = dict(m.all())
-        total_mods = sum(mod_stats.values())
+    try:
+        async with SessionLocal() as session:
+            logger.debug("[/index] Получение статистики пользователей")
+            u = await session.execute(
+                select(User.language_code, func.count()).group_by(User.language_code)
+            )
+            user_stats = dict(u.all())
+            total_users = sum(user_stats.values())
 
-        # 3) Заявки по языкам и статусам
-        r = await session.execute(
-            select(SupportRequest.language, SupportRequest.status, func.count())
-            .group_by(SupportRequest.language, SupportRequest.status)
-        )
-        raw = r.all()
+            logger.debug("[/index] Получение статистики модераторов")
+            m = await session.execute(
+                select(User.language_code, func.count())
+                .where(User.role == "moderator")
+                .group_by(User.language_code)
+            )
+            mod_stats = dict(m.all())
+            total_mods = sum(mod_stats.values())
 
-    # собираем структуру { lang: { total, pending, in_progress, closed } }
-    req_stats = {}
-    for lang, st, cnt in raw:
-        rec = req_stats.setdefault(lang, {
-            "total": 0, "pending": 0, "in_progress": 0, "closed": 0
+            logger.debug("[/index] Получение статистики заявок")
+            r = await session.execute(
+                select(SupportRequest.language, SupportRequest.status, func.count())
+                .group_by(SupportRequest.language, SupportRequest.status)
+            )
+            raw = r.all()
+
+        req_stats = {}
+        for lang, st, cnt in raw:
+            rec = req_stats.setdefault(lang, {
+                "total": 0, "pending": 0, "in_progress": 0, "closed": 0
+            })
+            rec[st] += cnt
+            rec["total"] += cnt
+        total_reqs = sum(v["total"] for v in req_stats.values())
+
+        logger.info(f"[/index] Статистика собрана: users={total_users}, mods={total_mods}, requests={total_reqs}")
+
+        languages = sorted({*user_stats, *mod_stats, *req_stats})
+        statuses = ["pending", "in_progress", "closed"]
+
+        return templates.TemplateResponse("index.html", {
+            "request": request,
+            "user_stats": user_stats,
+            "mod_stats": mod_stats,
+            "req_stats": req_stats,
+            "languages": languages,
+            "statuses": statuses,
+            "flags": flags,
+            "status_labels": status_labels,
+            "total_users": total_users,
+            "total_mods": total_mods,
+            "total_reqs": total_reqs,
         })
-        rec[st] += cnt
-        rec["total"] += cnt
-    total_reqs = sum(v["total"] for v in req_stats.values())
 
-    languages = sorted({*user_stats, *mod_stats, *req_stats})
-    statuses = ["pending", "in_progress", "closed"]
-
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "user_stats": user_stats,
-        "mod_stats": mod_stats,
-        "req_stats": req_stats,
-        "languages": languages,
-        "statuses": statuses,
-        "flags": flags,
-        "status_labels": status_labels,
-        "total_users": total_users,
-        "total_mods": total_mods,
-        "total_reqs": total_reqs,
-    })
+    except Exception as e:
+        logger.exception(f"[GET /] Ошибка при загрузке главной страницы: {e}")
+        raise
 
 @app.get("/translations", dependencies=[Depends(get_current_user)], response_class=HTMLResponse)
 async def show_translations(request: Request):
-    async with SessionLocal() as session:
-        result = await session.execute(
-            select(Translation).where(Translation.lang.in_(["ru", "en"]))
-        )
-        rows = result.scalars().all()
+    logger.info("[GET /translations] Загрузка страницы переводов")
 
-    # Сгруппировать по ключу
-    translations = defaultdict(dict)
-    langs_set = set()
+    try:
+        async with SessionLocal() as session:
+            logger.debug("[/translations] Получение переводов для 'ru' и 'en'")
+            result = await session.execute(
+                select(Translation).where(Translation.lang.in_(["ru", "en"]))
+            )
+            rows = result.scalars().all()
+            logger.info(f"[/translations] Загружено переводов: {len(rows)}")
 
-    for row in rows:
-        translations[row.key][row.lang] = row.text
-        langs_set.add(row.lang)
+        translations = defaultdict(dict)
+        langs_set = set()
 
-    langs = sorted(langs_set)
+        for row in rows:
+            translations[row.key][row.lang] = row.text
+            langs_set.add(row.lang)
 
-    return templates.TemplateResponse("translations.html", {
-        "request": request,
-        "translations": translations,
-        "langs": langs,
-        "key_descriptions": key_descriptions,
-        "flags": flags
-    })
+        langs = sorted(langs_set)
+        logger.debug(f"[/translations] Найденные языки: {langs}")
+
+        return templates.TemplateResponse("translations.html", {
+            "request": request,
+            "translations": translations,
+            "langs": langs,
+            "key_descriptions": key_descriptions,
+            "flags": flags
+        })
+
+    except Exception as e:
+        logger.exception(f"[GET /translations] Ошибка при загрузке переводов: {e}")
+        raise
 
 @app.post("/update")
 async def update_translation(data: UpdateRequest):
-    async with SessionLocal() as session:
-        await session.execute(
-            update(Translation)
-            .where(Translation.key == data.key, Translation.lang == data.lang)
-            .values(text=data.text)
-        )
-        await session.commit()
-    return JSONResponse(content={"status": "ok"})
+    logger.info(f"[POST /update] Запрос на обновление перевода: key='{data.key}', lang='{data.lang}'")
+
+    try:
+        async with SessionLocal() as session:
+            logger.debug(f"[/update] Выполнение запроса UPDATE для key='{data.key}', lang='{data.lang}'")
+
+            result = await session.execute(
+                update(Translation)
+                .where(Translation.key == data.key, Translation.lang == data.lang)
+                .values(text=data.text)
+            )
+            await session.commit()
+
+            # Проверим, были ли затронуты строки (для отладки)
+            updated = result.rowcount
+            if updated == 0:
+                logger.warning(f"[/update] ⚠️ Перевод не найден или не обновлён: key='{data.key}', lang='{data.lang}'")
+            else:
+                logger.info(f"[/update] ✅ Перевод обновлён: key='{data.key}', lang='{data.lang}', rows affected={updated}")
+
+        return JSONResponse(content={"status": "ok"})
+
+    except Exception as e:
+        logger.exception(f"[POST /update] ❌ Ошибка при обновлении перевода: key='{data.key}', lang='{data.lang}': {e}")
+        raise
 
 @app.get("/users", dependencies=[Depends(get_current_user)], response_class=HTMLResponse)
 async def users_view(request: Request, q: str = "", page: int = 1, per_page: int = 20):
+
     offset = (page - 1) * per_page
+    client_ip = request.client.host
+    current_user = request.scope.get("user")  # если get_current_user добавляет юзера в scope
+
+    logger.info(f"🔍 /users requested by {current_user} from {client_ip} | query='{q}' | page={page}, per_page={per_page}")
 
     async with SessionLocal() as session:
-        # Общее количество (учитывая фильтр, если есть)
         count_query = select(func.count()).select_from(User)
         user_query = select(User)
 
@@ -237,8 +287,14 @@ async def users_view(request: Request, q: str = "", page: int = 1, per_page: int
         users = await session.execute(
             user_query.order_by(User.id.desc()).offset(offset).limit(per_page)
         )
+        langs_available = await session.execute(
+            select(Language).where(Language.available == True)
+        )
+        available_languages = langs_available.scalars().all()
 
     total_pages = (total + per_page - 1) // per_page
+
+    logger.info(f"✅ /users responded with {total} users")
 
     return templates.TemplateResponse("users.html", {
         "request": request,
@@ -248,49 +304,79 @@ async def users_view(request: Request, q: str = "", page: int = 1, per_page: int
         "query": q,
         "page": page,
         "total_pages": total_pages,
+        "available_languages": available_languages,
         "flags": flags
     })
 
-@app.post("/users/set-role")
-async def set_user_role(user_id: int = Form(...), role: str = Form(...)):
-    async with SessionLocal() as session:
-        user = await session.get(User, user_id)
-        if not user:
-            return RedirectResponse("/users", status_code=303)
+@app.post("/users/set-language")
+async def set_user_language(request: Request, user_id: int = Form(...), lang: str = Form(...)):
+    try:
+        async with SessionLocal() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                logger.warning(f"⚠️ Attempt to change language for non-existent user_id={user_id} from {request.client.host}")
+                return RedirectResponse("/users", status_code=303)
 
-        # обновляем роль в users
-        await session.execute(
-            update(User).where(User.id == user_id).values(role=role)
-        )
+            logger.info(f"🌐 Changing language for user_id={user_id} (@{user.username}) to '{lang}'")
 
-        # если назначили admin — генерим email/пароль и сохраняем/обновляем credentials
-        text = None
-        if role == "admin":
-            username = user.username.lstrip("@")
-            email = f"{username}@admin.grandtime.com"
-            raw_pw = username + secrets.token_hex(3)
-            pw_hash = bcrypt.hashpw(raw_pw.encode(), bcrypt.gensalt()).decode()
-
-            credentials_stmt = mysql_insert(Credentials).values(
-                user_id=user.id,
-                email=email,
-                password_hash=pw_hash
-            ).on_duplicate_key_update(
-                password_hash=pw_hash
+            await session.execute(
+                update(User).where(User.id == user_id).values(language_code=lang)
             )
-            await session.execute(credentials_stmt)
-            text = f"Email: {email}\nPassword: {raw_pw}"
 
-        # пишем в статус все роли
-        status_stmt = insert(Status).values(
-            id=user.id,
-            language_code=user.language_code,
-            role=role,
-            text=text
-        )
-        await session.execute(status_stmt)
+            await session.commit()
+            logger.info(f"✅ Language '{lang}' set for user_id={user_id}")
 
-        await session.commit()
+    except Exception as e:
+        logger.error(f"❌ Error in set_user_language for user_id={user_id}: {e}\n{traceback.format_exc()}")
+
+    return RedirectResponse("/users", status_code=303)
+
+@app.post("/users/set-role")
+async def set_user_role(request: Request, user_id: int = Form(...), role: str = Form(...)):
+    try:
+        async with SessionLocal() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                logger.warning(f"⚠️ Attempt to set role '{role}' for non-existent user_id={user_id} from {request.client.host}")
+                return RedirectResponse("/users", status_code=303)
+
+            logger.info(f"🔄 Changing role for user_id={user_id} (@{user.username}) to '{role}'")
+
+            await session.execute(
+                update(User).where(User.id == user_id).values(role=role)
+            )
+
+            text = None
+            if role == "admin":
+                username = user.username.lstrip("@")
+                email = f"{username}@admin.grandtime.com"
+                raw_pw = username + secrets.token_hex(3)
+                pw_hash = bcrypt.hashpw(raw_pw.encode(), bcrypt.gensalt()).decode()
+
+                credentials_stmt = mysql_insert(Credentials).values(
+                    user_id=user.id,
+                    email=email,
+                    password_hash=pw_hash
+                ).on_duplicate_key_update(
+                    password_hash=pw_hash
+                )
+                await session.execute(credentials_stmt)
+                text = f"Email: {email}\nPassword: {raw_pw}"
+                logger.info(f"✅ Admin credentials created for user_id={user_id} | email={email}")
+
+            status_stmt = insert(Status).values(
+                id=user.id,
+                language_code=user.language_code,
+                role=role,
+                text=text
+            )
+            await session.execute(status_stmt)
+
+            await session.commit()
+            logger.info(f"✅ Role '{role}' assigned to user_id={user_id} successfully")
+
+    except Exception as e:
+        logger.error(f"❌ Error in set_user_role for user_id={user_id}: {e}\n{traceback.format_exc()}")
 
     return RedirectResponse("/users", status_code=303)
 
@@ -302,10 +388,17 @@ async def requests_view(
     page: int = 1,
     per_page: int = 20,
 ):
+
     offset = (page - 1) * per_page
 
+    client_ip = request.client.host
+    current_user = request.scope.get("user")  # если get_current_user это добавляет
+
+    logger.info(
+        f"📥 /requests requested by {current_user} from {client_ip} | lang={lang} | status={status} | page={page}, per_page={per_page}"
+    )
+
     async with SessionLocal() as session:
-        # Базовый запрос с фильтрами
         q = select(SupportRequest) \
             .options(
                 selectinload(SupportRequest.user),
@@ -318,17 +411,14 @@ async def requests_view(
         if status != "all":
             q = q.where(SupportRequest.status == status)
 
-        # Общее число заявок после фильтра
         total_q = select(func.count()).select_from(q.subquery())
         total = await session.scalar(total_q)
 
-        # Достаём нужную страницу
         result = await session.execute(
             q.offset(offset).limit(per_page)
         )
         requests_list = result.scalars().all()
 
-        # Статистика (без пагинации)
         stat_result = await session.execute(
             select(
                 SupportRequest.language,
@@ -341,7 +431,6 @@ async def requests_view(
         )
         raw_stats = stat_result.all()
 
-    # Собираем lang_stats
     lang_stats = {}
     for l, st, cnt in raw_stats:
         rec = lang_stats.setdefault(l, {"total": 0, "pending": 0, "in_progress": 0, "closed": 0})
@@ -349,6 +438,10 @@ async def requests_view(
         rec["total"] += cnt
 
     total_pages = (total + per_page - 1) // per_page
+
+    logger.info(
+        f"✅ /requests returned {len(requests_list)} of {total} requests"
+    )
 
     return templates.TemplateResponse("requests.html", {
         "request": request,
@@ -368,6 +461,11 @@ async def requests_view(
 
 @app.get("/chat/{request_id}", dependencies=[Depends(get_current_user)], response_class=HTMLResponse)
 async def chat_view(request: Request, request_id: int):
+    client_ip = request.client.host
+    current_user = request.scope.get("user")  # если добавляешь юзера в scope
+
+    logger.info(f"💬 /chat/{request_id} requested by {current_user} from {client_ip}")
+
     async with SessionLocal() as session:
         result = await session.execute(
             select(SupportRequest)
@@ -379,10 +477,11 @@ async def chat_view(request: Request, request_id: int):
             .where(SupportRequest.id == request_id)
         )
         support_request = result.scalar_one_or_none()
+
         if not support_request:
+            logger.warning(f"⚠️ Support request {request_id} not found")
             return HTMLResponse("Request not found", status_code=404)
 
-    # Загружаем фото для сообщений (если есть)
     messages = []
     for m in sorted(support_request.messages, key=lambda m: m.timestamp):
         photo_url = None
@@ -390,7 +489,8 @@ async def chat_view(request: Request, request_id: int):
             try:
                 photo_url = await resolve_photo_url(m.photo_file_id)
             except Exception as e:
-                print(f"Ошибка загрузки фото: {e}")
+                logger.error(f"❌ Error loading photo for message {m.id} in request {request_id}: {e}")
+                logger.debug(traceback.format_exc())
 
         messages.append({
             "text": m.text,
@@ -402,12 +502,13 @@ async def chat_view(request: Request, request_id: int):
             "is_moderator": m.sender_id == (support_request.assigned_moderator_id or 0)
         })
 
+    logger.info(f"✅ Loaded chat for request {request_id} with {len(messages)} messages")
+
     return templates.TemplateResponse("chat.html", {
         "request": request,
         "support": support_request,
         "messages": messages
     })
-
 
 if __name__ == "__main__":
     uvicorn.run("main:app", reload=True)

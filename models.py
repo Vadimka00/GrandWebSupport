@@ -37,6 +37,7 @@ class SupportRequest(Base):
     status = Column(String(20), default='pending')  # pending / in_progress / closed
     language = Column(String(2))  # 'ru' or 'en'
     created_at = Column(DateTime, default=datetime.utcnow)
+    taken_at = Column(DateTime, nullable=True)
     closed_at = Column(DateTime, nullable=True)
 
     # Связь на пользователя, отправившего запрос

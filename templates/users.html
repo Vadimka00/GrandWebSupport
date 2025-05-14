@@ -165,6 +165,13 @@
 
   <div class="search">
     <input type="text" name="q" placeholder="Поиск по имени или username">
+  
+    <select id="role-filter">
+      <option value="">Все роли</option>
+      <option value="user">user</option>
+      <option value="moderator">moderator</option>
+      <option value="admin">admin</option>
+    </select>
   </div>
 
   <table>
@@ -184,7 +191,28 @@
           <td data-label="Username">{{ user.username or "—" }}</td>
           <td data-label="Имя">{{ user.full_name }}</td>
           <td data-label="Язык">
-            {{ flags.get(user.language_code, '🏳') }} {{ user.language_code }}
+            <form method="post" action="/users/set-language">
+              <input type="hidden" name="user_id" value="{{ user.id }}">
+              {% set available_codes = available_languages | map(attribute="code") | list %}
+              {% set lang_is_empty = not user.language_code %}
+              {% set lang_is_unknown = user.language_code and user.language_code not in available_codes %}
+              
+              {% if lang_is_empty %}
+                <select disabled>
+                  <option selected>🏳 Не указан</option>
+                </select>
+              {% else %}
+                <select name="lang" onchange="this.form.submit()">
+                  {# Показываем доступные языки #}
+                  {% for lang in available_languages %}
+                    <option value="{{ lang.code }}"
+                      {% if user.language_code == lang.code %}selected{% endif %}>
+                      {{ flags.get(lang.code, '🏳') }} {{ lang.code }}
+                    </option>
+                  {% endfor %}
+                </select>
+              {% endif %}
+            </form>
           </td>
           <td data-label="Роль">
             <form method="post" action="/users/set-role">
@@ -213,29 +241,54 @@
     {% endif %}
   </div>
 
-  {% endblock %}
-
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const input = document.querySelector("input[name='q']");
+      const roleFilter = document.querySelector("#role-filter");
       const rows = document.querySelectorAll("tbody tr");
   
-      input.addEventListener("input", () => {
+      function filterByText() {
         const q = input.value.toLowerCase().trim();
   
         rows.forEach(row => {
           const username = row.querySelector('td[data-label="Username"]')?.textContent.toLowerCase() || "";
           const fullname = row.querySelector('td[data-label="Имя"]')?.textContent.toLowerCase() || "";
   
-          if (q === "" || username.includes(q) || fullname.includes(q)) {
-            row.style.display = "";
-          } else {
-            row.style.display = "none";
-          }
+          const match = q === "" || username.includes(q) || fullname.includes(q);
+          row.dataset.matchText = match ? "1" : "0";
+          updateVisibility(row);
         });
+      }
+  
+      function filterByRole() {
+        const selectedRole = roleFilter.value;
+  
+        rows.forEach(row => {
+          const roleValue = row.querySelector('td[data-label="Роль"] select')?.value || "";
+          const match = selectedRole === "" || roleValue === selectedRole;
+          row.dataset.matchRole = match ? "1" : "0";
+          updateVisibility(row);
+        });
+      }
+  
+      function updateVisibility(row) {
+        const textOk = row.dataset.matchText !== "0";
+        const roleOk = row.dataset.matchRole !== "0";
+        row.style.display = textOk && roleOk ? "" : "none";
+      }
+  
+      // Инициализируем
+      rows.forEach(row => {
+        row.dataset.matchText = "1";
+        row.dataset.matchRole = "1";
       });
+  
+      input.addEventListener("input", filterByText);
+      roleFilter.addEventListener("change", filterByRole);
     });
   </script>
+
+  {% endblock %}
 
 </body>
 </html>

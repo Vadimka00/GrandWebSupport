@@ -63,6 +63,8 @@
       background-color: var(--accent-bg);
     }
 
+
+    
     .editable:focus {
         outline: 2px solid #007bff;
         background-color: #eef6ff;
@@ -145,7 +147,7 @@
                 <small class="key-id">{{ key }}</small>
             </td>
           {% for lang in langs %}
-          <td <td data-label="{{ flags.get(lang, '🏳') }}"
+          <td data-label="{{ flags.get(lang, '🏳') }}"
                 contenteditable="true"
                 class="editable"
                 data-key="{{ key }}"
@@ -157,15 +159,19 @@
       {% endfor %}
     </tbody>
   </table>
-  {% endblock %}
+
   <script>
     document.addEventListener("DOMContentLoaded", () => {
+      console.log("✅ JS загружен");
+  
       document.querySelectorAll(".editable").forEach(cell => {
+  
         cell.addEventListener("blur", async () => {
           const key = cell.dataset.key;
           const lang = cell.dataset.lang;
-          const text = cell.innerText.trim();
-  
+          // Заменяем реальные переносы строк на \n
+          const rawText = cell.innerText.trim();
+          const text = rawText.replace(/\n{3,}/g, "\n\n").replace(/\n/g, "\\n");
           await fetch("/update", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -179,6 +185,8 @@
       });
     });
   </script>
+
+  {% endblock %}
 
 </body>
 </html>
