@@ -174,7 +174,14 @@ async def index(request: Request):
 
         logger.info(f"[/index] Статистика собрана: users={total_users}, mods={total_mods}, requests={total_reqs}")
 
-        languages = sorted({*user_stats, *mod_stats, *req_stats})
+        def safe_lang(lang):
+            return lang if lang is not None else 'None'
+
+        user_stats = {safe_lang(k): v for k, v in user_stats.items()}
+        mod_stats = {safe_lang(k): v for k, v in mod_stats.items()}
+        req_stats = {safe_lang(k): v for k, v in req_stats.items()}
+
+        languages = sorted(set(user_stats) | set(mod_stats) | set(req_stats))
         statuses = ["pending", "in_progress", "closed"]
 
         return templates.TemplateResponse("index.html", {
