@@ -2,7 +2,8 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, ForeignKey, Text, Boolean
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from typing import List
 from datetime import datetime
 from config import DATABASE_URL 
 
@@ -81,6 +82,7 @@ class Language(Base):
 
     code = Column(String(10), primary_key=True)
     name = Column(String(50), nullable=False)
+    name_ru = Column(String(50), nullable=False)
     emoji = Column(String(10), default="")
     available = Column(Boolean, default=True)
 
@@ -100,3 +102,33 @@ class Credentials(Base):
     password_hash = Column(String(255), nullable=False)
 
     user = relationship("User", back_populates="credentials")
+
+class SupportGroup(Base):
+    __tablename__ = "support_groups"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255))
+    photo_url: Mapped[str] = mapped_column(String(512))
+
+    languages: Mapped[List["SupportGroupLanguage"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+    moderators: Mapped[List["ModeratorGroupLink"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+
+class SupportGroupLanguage(Base):
+    __tablename__ = "support_group_languages"
+
+    group_id: Mapped[int] = mapped_column(ForeignKey("support_groups.id"), primary_key=True)
+    language_code: Mapped[str] = mapped_column(String(5), primary_key=True)  # 'ru', 'en', 'pl'
+
+    group: Mapped["SupportGroup"] = relationship(back_populates="languages")
+
+class ModeratorGroupLink(Base):
+    __tablename__ = "moderator_group_links"
+
+    moderator_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("support_groups.id"), primary_key=True)
+
+    group: Mapped["SupportGroup"] = relationship(back_populates="moderators")

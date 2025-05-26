@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <title>Админ-панель</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+  
+  </style>
+</head>
+<body>
+{% extends "base.html" %}
+
+{% block title %}Настройки – Админ-панель{% endblock %}
+
+{% block content %}
+<style>
+  h1, h2 {
+    margin-top: 1.5em;
+  }
+
+  .languages-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 2em;
+  }
+
+  .language-item {
+    flex: 1 1 calc(20% - 12px);
+    min-width: 100px;
+    max-width: 160px;
+    background: #f4f4f4;
+    border-radius: 6px;
+    padding: 8px 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    text-align: left;
+    transition: 0.2s;
+  }
+
+  .language-item.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .language-item label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .language-item input[type="checkbox"] {
+    transform: scale(1.1);
+    cursor: pointer;
+  }
+
+  .language-item .emoji {
+    font-size: 18px;
+  }
+
+  .language-item .label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .group-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 1em;
+  }
+
+  .group-card {
+    flex: 1 1 320px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 12px;
+    background: #fafafa;
+    box-shadow: 1px 1px 4px rgba(0,0,0,0.05);
+  }
+
+  .group-card img {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .group-card h3 {
+    font-size: 16px;
+    margin: 0.5em 0 0.2em;
+  }
+
+    .language-badge {
+    background: #e0e0e0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    }
+
+    form {
+        margin-top: 10px;
+    }
+
+    .language-badge form {
+    display: inline;
+    margin: 0;
+    }
+
+    .language-badge button {
+    background: none;
+    border: none;
+    font-weight: bold;
+    color: #900;
+    cursor: pointer;
+    padding: 0 4px;
+    }
+
+  .moderator-badge {
+    background: #e0e0e0;
+    padding: 6px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .moderator-badge form {
+    display: inline;
+    margin: 0;
+  }
+
+  .moderator-badge button {
+    background: none;
+    border: none;
+    color: #900;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  @media (max-width: 1024px) {
+    .language-item {
+      flex: 1 1 calc(25% - 12px);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .language-item {
+      flex: 1 1 calc(33.33% - 12px);
+      max-width: 150px;
+    }
+  }
+
+  @media (max-width: 500px) {
+    .language-item {
+      flex: 1 1 calc(50% - 12px);
+    }
+  }
+</style>
+
+<h1>Настройки</h1>
+
+<h2>Языки</h2>
+<div class="languages-grid">
+  {% for lang in languages %}
+    <form method="post" action="/settings/toggle-language/{{ lang.code }}"
+          class="language-item {% if lang.code in unavailable_codes %}disabled{% endif %}">
+      <label title="{{ lang.name_ru }}">
+        <input type="checkbox"
+               onchange="this.form.submit()"
+               {% if lang.available %}checked{% endif %}
+               {% if lang.code in unavailable_codes %}disabled{% endif %}>
+        <span class="emoji">{{ lang.emoji }}</span>
+        <span class="label">
+          {{ lang.name_ru }}
+          {% if lang.code in unavailable_codes %} 🔒{% endif %}
+        </span>
+      </label>
+    </form>
+  {% endfor %}
+</div>
+
+<h2>Группы</h2>
+<div class="group-grid">
+  {% for group in groups %}
+    <div class="group-card">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="{{ get_photo_url(group.photo_url) }}" alt="Фото группы">
+        <div>
+          <strong>{{ group.title }}</strong><br>
+          <small>ID: {{ group.id }}</small>
+        </div>
+      </div>
+
+      <div style="margin-top: 0.5em;">
+        <strong>Языки:</strong>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
+          {% for link in group.languages %}
+            {% set lang = (languages | selectattr("code", "equalto", link.language_code) | list).0 %}
+            <div class="language-badge">
+              <span>{{ lang.emoji }} {{ lang.name_ru }}</span>
+              <form method="post" action="/settings/unassign-language/{{ group.id }}/{{ lang.code }}">
+                <button title="Удалить язык" type="submit">&times;</button>
+              </form>
+            </div>
+          {% endfor %}
+        </div>
+
+        {% set assigned_langs = group.languages | map(attribute='language_code') | list %}
+        {% set assignable_langs = languages
+            | selectattr("available")
+            | rejectattr("code", "in", assigned_langs)
+            | rejectattr("code", "in", unavailable_codes)
+            | list %}
+        {% if assignable_langs %}
+          <form method="post" action="/settings/assign-language/{{ group.id }}" style="margin-top: 6px;">
+            <select name="language_code">
+              {% for lang in assignable_langs %}
+                <option value="{{ lang.code }}">{{ lang.emoji }} {{ lang.name_ru }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">Добавить</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <div style="margin-top: 0.5em;">
+        <strong>Модераторы:</strong>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
+        {% for mod in group.moderators %}
+            {% for u in moderators if u.id == mod.moderator_id %}
+            <div class="language-badge">
+                <span>
+                {{ u.full_name }}
+                {% if u.username %}(@{{ u.username }}){% endif %}
+                </span>
+                <form method="post" action="/settings/unassign-moderator/{{ group.id }}/{{ u.id }}">
+                <button type="submit" title="Удалить модератора">&times;</button>
+                </form>
+            </div>
+            {% endfor %}
+        {% endfor %}
+        </div>
+
+        {% set assigned_mods = group.moderators | map(attribute='moderator_id') | list %}
+        {% set available_mods = moderators | rejectattr("id", "in", assigned_mods) | list %}
+        {% if available_mods %}
+          <form method="post" action="/settings/assign-moderator/{{ group.id }}">
+            <select name="moderator_id">
+              {% for user in available_mods %}
+                <option value="{{ user.id }}">
+                  {{ user.full_name }}{% if user.username %} (@{{ user.username }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <button type="submit">Добавить</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+</div>
+{{ super() }}
+<div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(255,255,255,0.8); z-index:10000; align-items:center; justify-content:center; font-size:20px; font-weight:bold; color:#333;">
+  ⏳ Подождите, выполняется действие...
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const forms = document.querySelectorAll("form");
+    const overlay = document.getElementById("loading-overlay");
+
+    forms.forEach(form => {
+      form.addEventListener("submit", () => {
+        overlay.style.display = "flex";
+      });
+    });
+  });
+</script>
+
+{% endblock %}
+</body>
+</html>

@@ -18,6 +18,11 @@ import traceback
 from starlette.responses import Response
 from starlette.status import HTTP_303_SEE_OTHER
 from utils.logger import logger
+from routes import (
+    gpt_translations,
+    save_translations,
+    settings
+)
 
 class UpdateRequest(BaseModel):
     key: str
@@ -35,10 +40,12 @@ with open("status_labels.json", encoding="utf-8") as f:
     status_labels = json.load(f)
 
 app = FastAPI()
+app.include_router(gpt_translations.router)
+app.include_router(save_translations.router)
+app.include_router(settings.router)
 templates = Jinja2Templates(directory="templates")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 
 
 # Этот middleware позволит перехватывать 500 ошибки
@@ -208,27 +215,64 @@ async def show_translations(request: Request):
 
     try:
         async with SessionLocal() as session:
-            logger.debug("[/translations] Получение переводов для 'ru' и 'en'")
-            result = await session.execute(
-                select(Translation).where(Translation.lang.in_(["ru", "en"]))
-            )
-            rows = result.scalars().all()
-            logger.info(f"[/translations] Загружено переводов: {len(rows)}")
+            # Загружаем все переводы
+            result = await session.execute(select(Translation))
+            translations_raw = result.scalars().all()
+
+            # Загружаем все языки
+            all_langs_result = await session.execute(select(Language))
+            all_langs = all_langs_result.scalars().all()
 
         translations = defaultdict(dict)
-        langs_set = set()
+        used_lang_codes = set()
 
-        for row in rows:
+        for row in translations_raw:
             translations[row.key][row.lang] = row.text
-            langs_set.add(row.lang)
+            used_lang_codes.add(row.lang)
 
-        langs = sorted(langs_set)
-        logger.debug(f"[/translations] Найденные языки: {langs}")
+        selected_code = request.query_params.get("add")
+        selected_lang = next((l for l in all_langs if l.code == selected_code), None)
+
+        temp_translations = {}
+
+        if selected_lang:
+            # Показываем только ru и выбранный
+            langs = [l for l in all_langs if l.code == "ru"]
+            if selected_lang.code != "ru":
+                langs.append(selected_lang)
+
+            # GPT перевод
+            from services.gpt_translate import translate_with_gpt
+            ru_texts = {k: v["ru"] for k, v in translations.items() if "ru" in v}
+
+            gpt_translations = await translate_with_gpt(
+                ru_texts,
+                selected_lang.code,
+                selected_lang.name_ru,
+                selected_lang.emoji or ""
+            )
+
+            for k, v in gpt_translations.items():
+                translations[k][selected_lang.code] = v
+            temp_translations = gpt_translations
+
+        else:
+            # Показываем все языки, которые уже используются
+            langs = [l for l in all_langs if l.code in used_lang_codes]
+
+        # Сортировка: ru первым
+        langs = sorted(langs, key=lambda l: (l.code != "ru", l.name_ru))
+
+        # Языки, которых ещё нет в базе
+        missing_langs = [l for l in all_langs if l.code not in used_lang_codes]
 
         return templates.TemplateResponse("translations.html", {
             "request": request,
             "translations": translations,
             "langs": langs,
+            "missing_langs": missing_langs,
+            "selected_lang": selected_lang,
+            "temp_translations": temp_translations,
             "key_descriptions": key_descriptions,
             "flags": flags
         })
@@ -243,23 +287,23 @@ async def update_translation(data: UpdateRequest):
 
     try:
         async with SessionLocal() as session:
-            logger.debug(f"[/update] Выполнение запроса UPDATE для key='{data.key}', lang='{data.lang}'")
-
             result = await session.execute(
-                update(Translation)
-                .where(Translation.key == data.key, Translation.lang == data.lang)
-                .values(text=data.text)
+                select(Translation).where(
+                    Translation.key == data.key,
+                    Translation.lang == data.lang
+                )
             )
+            translation = result.scalar_one_or_none()
+
+            if translation is None:
+                logger.warning(f"[POST /update] ⚠ Перевод не найден: key='{data.key}', lang='{data.lang}' — обновление не выполнено")
+                return JSONResponse(content={"status": "not_found"}, status_code=404)
+
+            translation.text = data.text
             await session.commit()
 
-            # Проверим, были ли затронуты строки (для отладки)
-            updated = result.rowcount
-            if updated == 0:
-                logger.warning(f"[/update] ⚠️ Перевод не найден или не обновлён: key='{data.key}', lang='{data.lang}'")
-            else:
-                logger.info(f"[/update] ✅ Перевод обновлён: key='{data.key}', lang='{data.lang}', rows affected={updated}")
-
-        return JSONResponse(content={"status": "ok"})
+            logger.info(f"[POST /update] ✅ Перевод обновлён: key='{data.key}', lang='{data.lang}'")
+            return JSONResponse(content={"status": "updated"})
 
     except Exception as e:
         logger.exception(f"[POST /update] ❌ Ошибка при обновлении перевода: key='{data.key}', lang='{data.lang}': {e}")
