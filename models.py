@@ -17,7 +17,7 @@ class User(Base):
     id = Column(BigInteger, primary_key=True)         # Telegram ID
     username = Column(String(100))                    # @username
     full_name = Column(String(255))                   # Имя + фамилия
-    language_code = Column(String(2))                 # 'ru' / 'en'
+    language_code = Column(String(3))                 # 'ru' / 'en'
     role = Column(String(50), default='user')         # 'user' / 'moderator'
 
     # Явно указываем, что это связь по полю SupportRequest.user_id
@@ -36,7 +36,7 @@ class SupportRequest(Base):
     assigned_moderator_id = Column(BigInteger, ForeignKey("users.id"), nullable=True)
 
     status = Column(String(20), default='pending')  # pending / in_progress / closed
-    language = Column(String(2))  # 'ru' or 'en'
+    language = Column(String(3)) 
     created_at = Column(DateTime, default=datetime.utcnow)
     taken_at = Column(DateTime, nullable=True)
     closed_at = Column(DateTime, nullable=True)
@@ -73,7 +73,7 @@ class Translation(Base):
 
     id = Column(Integer, primary_key=True)
     key = Column(String(100), index=True)
-    lang = Column(String(2))
+    lang = Column(String(3))
     text = Column(Text)
 
 
@@ -90,7 +90,7 @@ class Status(Base):
     __tablename__ = "status"
 
     id = Column(BigInteger, primary_key=True)         # Telegram ID
-    language_code = Column(String(2))                 # 'ru' / 'en'
+    language_code = Column(String(3))                 # 'ru' / 'en'
     role = Column(String(50))
     text = Column(Text, nullable=True) 
 
