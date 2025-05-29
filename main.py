@@ -190,6 +190,8 @@ async def index(request: Request):
 
         languages = sorted(set(user_stats) | set(mod_stats) | set(req_stats))
         statuses = ["pending", "in_progress", "closed"]
+        langs_result = await session.execute(select(Language))
+        lang_names = {l.code: l.name_ru for l in langs_result.scalars().all()}
 
         return templates.TemplateResponse("index.html", {
             "request": request,
@@ -199,6 +201,7 @@ async def index(request: Request):
             "languages": languages,
             "statuses": statuses,
             "flags": flags,
+            "lang_names": lang_names,
             "status_labels": status_labels,
             "total_users": total_users,
             "total_mods": total_mods,
@@ -310,23 +313,35 @@ async def update_translation(data: UpdateRequest):
         raise
 
 @app.get("/users", dependencies=[Depends(get_current_user)], response_class=HTMLResponse)
-async def users_view(request: Request, q: str = "", page: int = 1, per_page: int = 20):
-
+async def users_view(
+    request: Request,
+    q: str = "",
+    role: str = "",
+    page: int = 1,
+    per_page: int = 20
+):
     offset = (page - 1) * per_page
     client_ip = request.client.host
-    current_user = request.scope.get("user")  # если get_current_user добавляет юзера в scope
+    current_user = request.scope.get("user")
 
-    logger.info(f"🔍 /users requested by {current_user} from {client_ip} | query='{q}' | page={page}, per_page={per_page}")
+    logger.info(f"🔍 /users requested by {current_user} from {client_ip} | q='{q}', role='{role}', page={page}")
 
     async with SessionLocal() as session:
         count_query = select(func.count()).select_from(User)
         user_query = select(User)
 
+        filters = []
+
         if q:
             like = f"%{q.lower()}%"
-            filter_expr = func.lower(User.username).like(like) | func.lower(User.full_name).like(like)
-            count_query = count_query.where(filter_expr)
-            user_query = user_query.where(filter_expr)
+            filters.append(func.lower(User.username).like(like) | func.lower(User.full_name).like(like))
+
+        if role:
+            filters.append(User.role == role)
+
+        if filters:
+            count_query = count_query.where(*filters)
+            user_query = user_query.where(*filters)
 
         total = await session.scalar(count_query)
 
@@ -338,21 +353,24 @@ async def users_view(request: Request, q: str = "", page: int = 1, per_page: int
         users = await session.execute(
             user_query.order_by(User.id.desc()).offset(offset).limit(per_page)
         )
+
         langs_available = await session.execute(
             select(Language).where(Language.available == True)
         )
         available_languages = langs_available.scalars().all()
 
-    total_pages = (total + per_page - 1) // per_page
+    lang_names = {lang.code: lang.name_ru for lang in available_languages}
 
-    logger.info(f"✅ /users responded with {total} users")
+    total_pages = (total + per_page - 1) // per_page
 
     return templates.TemplateResponse("users.html", {
         "request": request,
         "total": total,
         "lang_counts": lang_counts,
+        "lang_names": lang_names,
         "users": users.scalars().all(),
         "query": q,
+        "selected_role": role,
         "page": page,
         "total_pages": total_pages,
         "available_languages": available_languages,
@@ -439,17 +457,21 @@ async def requests_view(
     page: int = 1,
     per_page: int = 20,
 ):
-
     offset = (page - 1) * per_page
-
     client_ip = request.client.host
-    current_user = request.scope.get("user")  # если get_current_user это добавляет
+    current_user = request.scope.get("user")
 
     logger.info(
         f"📥 /requests requested by {current_user} from {client_ip} | lang={lang} | status={status} | page={page}, per_page={per_page}"
     )
 
     async with SessionLocal() as session:
+        # Получаем все языки
+        languages_result = await session.execute(select(Language))
+        languages = languages_result.scalars().all()
+        lang_names = {l.code: l.name_ru for l in languages}
+
+        # Запрос по SupportRequest
         q = select(SupportRequest) \
             .options(
                 selectinload(SupportRequest.user),
@@ -465,9 +487,7 @@ async def requests_view(
         total_q = select(func.count()).select_from(q.subquery())
         total = await session.scalar(total_q)
 
-        result = await session.execute(
-            q.offset(offset).limit(per_page)
-        )
+        result = await session.execute(q.offset(offset).limit(per_page))
         requests_list = result.scalars().all()
 
         stat_result = await session.execute(
@@ -480,8 +500,9 @@ async def requests_view(
                 SupportRequest.status
             )
         )
-        raw_stats = stat_result.all()
+        raw_stats = list(stat_result.all())  # <-- Важно: приводим к списку ДО выхода
 
+    # Обработка статистики
     lang_stats = {}
     for l, st, cnt in raw_stats:
         rec = lang_stats.setdefault(l, {"total": 0, "pending": 0, "in_progress": 0, "closed": 0})
@@ -504,6 +525,7 @@ async def requests_view(
         "current_lang": lang,
         "current_status": status,
         "flags": flags,
+        "lang_names": lang_names,
         "status_labels": status_labels,
         "page": page,
         "total_pages": total_pages,

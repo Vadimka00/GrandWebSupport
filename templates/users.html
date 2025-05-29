@@ -158,21 +158,21 @@
 
   <div class="stats">
     <strong>Всего:</strong> {{ total }} |
-    {% for lang, count in lang_counts.items() %}
-      <strong>{{ flags.get(lang, '🏳') }}</strong> {{ lang }}: {{ count }}
-    {% endfor %}
+  {% for lang, count in lang_counts.items() %}
+    <strong>{{ flags.get(lang, '🏳') }}</strong> {{ lang_names.get(lang, lang) }}: {{ count }}
+  {% endfor %}
   </div>
 
-  <div class="search">
-    <input type="text" name="q" placeholder="Поиск по имени или username">
-  
-    <select id="role-filter">
-      <option value="">Все роли</option>
-      <option value="user">user</option>
-      <option value="moderator">moderator</option>
-      <option value="admin">admin</option>
-    </select>
-  </div>
+<form class="search" method="get" action="/users">
+  <input type="text" name="q" placeholder="Поиск по имени или username" value="{{ query or '' }}">
+
+  <select name="role">
+    <option value="">Все роли</option>
+    <option value="user" {% if selected_role == 'user' %}selected{% endif %}>user</option>
+    <option value="moderator" {% if selected_role == 'moderator' %}selected{% endif %}>moderator</option>
+    <option value="admin" {% if selected_role == 'admin' %}selected{% endif %}>admin</option>
+  </select>
+</form>
 
   <table>
     <thead>
@@ -207,7 +207,7 @@
                   {% for lang in available_languages %}
                     <option value="{{ lang.code }}"
                       {% if user.language_code == lang.code %}selected{% endif %}>
-                      {{ flags.get(lang.code, '🏳') }} {{ lang.code }}
+                      {{ flags.get(lang.code, '🏳') }} {{ lang_names.get(lang.code, lang.code) }}
                     </option>
                   {% endfor %}
                 </select>
@@ -235,58 +235,33 @@
         {% if p == page %}
           <strong style="margin: 0 4px;">[{{ p }}]</strong>
         {% else %}
-          <a href="?page={{ p }}{% if query %}&q={{ query }}{% endif %}" style="margin: 0 4px;">{{ p }}</a>
+          <a href="?page={{ p }}{% if query %}&q={{ query }}{% endif %}{% if selected_role %}&role={{ selected_role }}{% endif %}" style="margin: 0 4px;">{{ p }}</a>
         {% endif %}
       {% endfor %}
     {% endif %}
   </div>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const input = document.querySelector("input[name='q']");
-      const roleFilter = document.querySelector("#role-filter");
-      const rows = document.querySelectorAll("tbody tr");
-  
-      function filterByText() {
-        const q = input.value.toLowerCase().trim();
-  
-        rows.forEach(row => {
-          const username = row.querySelector('td[data-label="Username"]')?.textContent.toLowerCase() || "";
-          const fullname = row.querySelector('td[data-label="Имя"]')?.textContent.toLowerCase() || "";
-  
-          const match = q === "" || username.includes(q) || fullname.includes(q);
-          row.dataset.matchText = match ? "1" : "0";
-          updateVisibility(row);
-        });
-      }
-  
-      function filterByRole() {
-        const selectedRole = roleFilter.value;
-  
-        rows.forEach(row => {
-          const roleValue = row.querySelector('td[data-label="Роль"] select')?.value || "";
-          const match = selectedRole === "" || roleValue === selectedRole;
-          row.dataset.matchRole = match ? "1" : "0";
-          updateVisibility(row);
-        });
-      }
-  
-      function updateVisibility(row) {
-        const textOk = row.dataset.matchText !== "0";
-        const roleOk = row.dataset.matchRole !== "0";
-        row.style.display = textOk && roleOk ? "" : "none";
-      }
-  
-      // Инициализируем
-      rows.forEach(row => {
-        row.dataset.matchText = "1";
-        row.dataset.matchRole = "1";
-      });
-  
-      input.addEventListener("input", filterByText);
-      roleFilter.addEventListener("change", filterByRole);
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const input = document.querySelector("input[name='q']");
+    const roleSelect = document.querySelector("select[name='role']");
+    const form = document.querySelector(".search");
+
+    // Автосабмит при выборе роли
+    roleSelect.addEventListener("change", () => {
+      form.submit();
     });
-  </script>
+
+    // Задержка при вводе текста (debounce)
+    let timeout;
+    input.addEventListener("input", () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        form.submit();
+      }, 100);
+    });
+  });
+</script>
 
   {% endblock %}
 

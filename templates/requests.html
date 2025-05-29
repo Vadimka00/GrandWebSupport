@@ -111,8 +111,8 @@
       <select name="lang" onchange="this.form.submit()">
         <option value="all" {% if current_lang=="all" %}selected{% endif %}>Все</option>
         {% for l in languages %}
-          <option value="{{ l }}" {% if l==current_lang %}selected{% endif %}>
-            {{ flags.get(l, '🏳') }} {{ l }}
+          <option value="{{ l }}" {% if l == current_lang %}selected{% endif %}>
+            {{ flags.get(l, '🏳') }} {{ lang_names.get(l, l) }}
           </option>
         {% endfor %}
       </select>
@@ -140,7 +140,7 @@
       {% for lang, stats in lang_stats.items() %}
         <div class="lang-card">
           <div class="lang-header">
-            {{ flags.get(lang, '🏳') }} {{ lang }}
+            {{ flags.get(lang, '🏳') }} {{ lang_names.get(lang, lang) }}
           </div>
           <div class="lang-body">
             <div><strong>Всего:</strong> {{ stats.total }}</div>
@@ -153,7 +153,6 @@
             </div>
           </div>
         </div>
-        </div>
       {% endfor %}
     </div>
   </div>
@@ -161,7 +160,7 @@
     <div class="card">
         <div class="meta">
             🆔 #{{ req.id }} |
-            {{ flags.get(req.language,'🏳') }} {{ req.language }} |
+            {{ flags.get(req.language,'🏳') }} {{ lang_names.get(req.language, req.language) }} |
             🕓 {{ req.created_at.strftime("%m.%d %H:%M") }}
             {% if req.taken_at %}
                 → 🛠 {{ req.taken_at.strftime("%m.%d %H:%M") }}

@@ -56,6 +56,41 @@
     .status.in_progress{ background:#cce5ff; color:#004085; }
     .status.closed     { background:#d4edda; color:#155724; }
 
+    .lang-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+
+    .lang-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .lang-card h4 {
+      font-size: 0.95rem;
+      margin: 0 0 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--accent);
+    }
+
+    .lang-card .metric {
+      font-size: 0.85rem;
+      margin: 0.25rem 0;
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+    }
+
+    .lang-card .metric strong {
+      color: var(--text);
+    }
+
     @media(max-width:768px){
       .cards { flex-direction:column; }
     }
@@ -70,43 +105,20 @@
     {% block content %}
 
 <section>
-  <h3>Пользователи по языкам ( {{ total_users }} ) </h2>
-  <div class="cards">
+  <h3>Языки и активность ({{ total_users }} пользователей, {{ total_mods }} модераторов, {{ total_reqs }} заявок)</h3>
+  <div class="lang-grid">
     {% for lang in languages %}
-      <div class="card">
-        <h2>{{ flags.get(lang,'🏳') }} {{ lang }}</h2>
-        <div class="value">{{ user_stats.get(lang, 0) }}</div>
-      </div>
-    {% endfor %}
-  </div>
-</section>
-
-<section>
-  <h3>Модераторы по языкам ( {{ total_mods }} )</h2>
-  <div class="cards">
-    {% for lang in languages %}
-      <div class="card">
-        <h2>{{ flags.get(lang,'🏳') }} {{ lang }}</h2>
-        <div class="value">{{ mod_stats.get(lang, 0) }}</div>
-      </div>
-    {% endfor %}
-  </div>
-</section>
-
-<section>
-  <h3>Заявки по языкам и статусам ( {{ total_reqs }} )</h2>
-  <div class="cards">
-    {% for lang in languages %}
-      <div class="card">
-        <h2>{{ flags.get(lang,'🏳') }} {{ lang }}</h2>
-        <div class="value">{{ req_stats.get(lang, {}).total or 0 }}</div>
-        <div>
-          {% for s in statuses %}
-            <span class="status {{ s }}">
-              {{ status_labels.get(s,s) }}: {{ req_stats.get(lang, {}).get(s, 0) }}
-            </span>
-          {% endfor %}
-        </div>
+      <div class="lang-card">
+        <h4>{{ flags.get(lang, '🏳') }} {{ lang_names.get(lang, lang) }}</h4>
+        <div class="metric">👥 Пользователи: <strong>{{ user_stats.get(lang, 0) }}</strong></div>
+        <div class="metric">🛠 Модераторы: <strong>{{ mod_stats.get(lang, 0) }}</strong></div>
+        <div class="metric">📩 Заявки: <strong>{{ req_stats.get(lang, {}).total or 0 }}</strong></div>
+        {% for s in statuses %}
+          <div class="metric">
+            <span class="status {{ s }}">{{ status_labels.get(s, s) }}:</span>
+            <strong>{{ req_stats.get(lang, {}).get(s, 0) }}</strong>
+          </div>
+        {% endfor %}
       </div>
     {% endfor %}
   </div>
